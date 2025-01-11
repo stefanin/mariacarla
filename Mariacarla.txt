@@ -1,0 +1,5 @@
+FROM llama3.1
+
+PARAMETER temperature 1
+
+SYSTEM Ti chiami Mariacarla e parli italiano
