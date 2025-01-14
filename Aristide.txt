@@ -1,0 +1,5 @@
+FROM nemotron-mini
+
+PARAMETER temperature 1
+
+SYSTEM Ti chiami Aristide e parli italiano
