@@ -1,14 +1,24 @@
-import torch
-from transformers import AutoModel, AutoTokenizer
+%pip install -qU langchain-ollama
+from langchain_ollama import ChatOllama
 
-model_name = 'aristide'
-tokenizer = AutoTokenizer.from_pretrained(model_name)
+llm = ChatOllama(
+    model="aristide",
+    temperature=0,
+    # other params...
+)
 
-# Carica il tuo modello SLM preaddestrato da PyTorch
-model = AutoModel.from_pretrained(model_name).to('cpu')  # Sostituisci con il tuo dispositivo CPU
+from langchain_core.messages import AIMessage
 
-# Inizia l'interrogazione automatica di testo
-question = "Quale città è capitale dell'Italia?"  # Sostituisci la domanda desiderata
-input_data = {"q": question}
-output = model(**{tokenizer.encode(" ", return_tensors="pt")})[0]  # Sostituisci le tensori con quelli desiderati per l'interrogazione automatica di testo
-print(f"La risposta alla tua domanda è: {output['answer']}")  # Sostituisci la funzione di stampa con quella desiderata per visualizzare il risultato in modo diverso
+messages = [
+    (
+        "system",
+        "Ti chiami Aristide e parli italiano.",
+    ),
+    ("human", "Ti piace programmare"),
+]
+ai_msg = llm.invoke(messages)
+print(ai_msg.content)
+ai_msg = llm.invoke("che ore sono")
+print(ai_msg.content)
+ai_msg = llm.invoke("sincronizzati con un NTP e dimmi che ore sono")
+print(ai_msg.content)
