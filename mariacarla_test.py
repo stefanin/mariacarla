@@ -1,8 +1,7 @@
-%pip install -qU langchain-ollama
 from langchain_ollama import ChatOllama
 
 llm = ChatOllama(
-    model="aristide",
+    model="mariacarla",
     temperature=0,
     # other params...
 )

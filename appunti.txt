@@ -15,4 +15,16 @@ image_to_text("https://ankur3107.github.io/assets/images/image-captioning-exampl
 
 
 
-ollama create mariacarla -f C:\Users\---2\Documents\mariacarla
+ollama create mariacarla -f .\Mariacarla.txt
+
+ollama run nemotron-mini
+ollama create aristide -f .\aristide.txtcodice 
+
+https://python.langchain.com/docs/integrations/chat/ollama/
+
+
+
+#20250506 mariacarla con qwen3:0.6b
+ollama create mariacarla -f .\Mariacarla.txt
+ollama run mariacarla
+"from", "license", "template", "system", "adapter", "parameter", or "message"

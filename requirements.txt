@@ -1,0 +1,12 @@
+flask
+requests
+langchain-community
+langchain-text-splitters
+ollama
+chromadb
+pypdf
+pandas
+openpyxl         # Per .xlsx
+python-docx      # Per .doc
+mysql-connector-python  # Per MySQL
+# langchain      # Potrebbe servire per utilità SQL o prompt più avanzati
