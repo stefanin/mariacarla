@@ -1,4 +1,4 @@
-# MariaCarla.py
+# app.py
 import os
 import logging
 import traceback
@@ -133,7 +133,26 @@ def execute_sql_query(sql_query):
     except Exception as e:
         logger.error(f"Errore imprevisto query '{sql_query}': {e}")
         return {"error": f"Errore imprevisto: {e}"}
+
+def load_document_vector_store():
+    global vector_store_docs
+    if not os.path.exists(VECTORSTORE_DOCS_DIR):
+        logger.error(f"'{VECTORSTORE_DOCS_DIR}' non trovato. Esegui 'create_vectorstore_docs.py'.")
+        return
+    try:
+        embedding_function = OllamaEmbeddings(model=OLLAMA_MODEL_NAME, base_url=OLLAMA_HOST)
+        vector_store_docs = Chroma(
+            persist_directory=VECTORSTORE_DOCS_DIR,
+            embedding_function=embedding_function,
+            collection_name=CHROMA_DOCS_COLLECTION_NAME
+        )
+        logger.info(f"Vector store documenti caricato. Elementi: {vector_store_docs._collection.count()}")
+    except Exception as e:
+        logger.error(f"Errore caricamento vector store documenti: {e}", exc_info=True)
+        vector_store_docs = None
+
 logger.info(f"Avvio App con modello Ollama: {OLLAMA_MODEL_NAME} su {OLLAMA_HOST}")
+load_document_vector_store()
 get_db_connection()
 
 @app.route('/')
@@ -146,7 +165,7 @@ def ask_assistant():
     user_question = data.get('domanda')
     if not user_question:
         return jsonify({"risposta": "Domanda mancante."}), 400
-    #user_question = "elencami le prime 15 righe della tabella d"
+
     logger.info(f"Ricevuta domanda: {user_question}")
     response_text = "Non sono riuscito a elaborare la tua richiesta."
 
@@ -162,20 +181,18 @@ def ask_assistant():
                 return jsonify({"risposta": db_schema})
 
             # *** PROMPT SQL GENERATION MODIFICATO (SOLUZIONE 1) ***
-            system_sql_gen = '''
-            Sei un esperto di MySQL. Il tuo compito è generare UNA SOLA query SQL SELECT valida per rispondere alla domanda dell'utente, basandoti sullo schema del database fornito.
-            IMPORTANTE: La tua risposta DEVE contenere ESCLUSIVAMENTE la query SQL, e nient'altro. Inoltre devi aggiungere un limite di 100 righe.
-            Non includere spiegazioni, commenti, testo introduttivo, tag di pensiero, o qualsiasi altra cosa prima o dopo la query SQL.
-            Se la domanda non può essere risposta con una singola query SELECT o richiede informazioni non presenti nello schema, la tua risposta DEVE essere ESATTAMENTE la stringa "NON POSSO GENERARE LA QUERY".
-            Schema Database:
-            {db_schema}
-            '''
+            system_sql_gen = f"""Sei un esperto di MySQL. Il tuo compito è generare UNA SOLA query SQL SELECT valida per rispondere alla domanda dell'utente, basandoti sullo schema del database fornito.
+IMPORTANTE: La tua risposta DEVE contenere ESCLUSIVAMENTE la query SQL, e nient'altro.
+Non includere spiegazioni, commenti, testo introduttivo, tag di pensiero, o qualsiasi altra cosa prima o dopo la query SQL.
+Se la domanda non può essere risposta con una singola query SELECT o richiede informazioni non presenti nello schema, la tua risposta DEVE essere ESATTAMENTE la stringa "NON POSSO GENERARE LA QUERY".
 
+Schema Database:
+{db_schema}
+"""
             prompt_sql_gen = f"Domanda Utente: {user_question}\nQuery SQL:"
             # *** FINE MODIFICA PROMPT ***
             
             logger.info("Invio a LLM per generazione SQL...")
-#            generated_sql_raw = get_ollama_completion(prompt_sql_gen, system_message=system_sql_gen).strip()
             generated_sql_raw = get_ollama_completion(prompt_sql_gen, system_message=system_sql_gen).strip()
             logger.info(f"SQL grezzo da LLM: '{generated_sql_raw}'")
 
@@ -188,8 +205,10 @@ def ask_assistant():
                 generated_sql = generated_sql_raw
 
             logger.info(f"SQL pulito per esecuzione: '{generated_sql}'")
+
+            print('-------> ',generated_sql)
             pulisco = generated_sql.split('</think>')
-            generated_sql = generated_sql.split('</think>')[1].replace("\n","")
+            generated_sql = pulisco[1].replace("\n","")
             if "NON POSSO GENERARE LA QUERY" in generated_sql.upper() or not generated_sql.upper().startswith("SELECT"):
                 response_text = f"Non sono riuscito a generare una query SQL valida. (LLM ha detto: '{generated_sql_raw}')"
             else:
@@ -200,19 +219,12 @@ def ask_assistant():
                     response_text = f"Query eseguita, nessun risultato.\nSQL: {generated_sql}"
                 else:
                     results_for_llm = f"Query SQL Eseguita: {generated_sql}\nRisultati:\n"
-                    results_for_llm += "\n" + ", ".join(query_results['columns']) + "\n"
-
-                    for riga in query_results['rows']:
-                        r = list(riga.values())
-                        try:
-                            r[2] = r[2].strftime("%Y-%m-%d")
-                        except:
-                            pass
-                        r = str(r).replace("'","").replace("[","").replace("]","")
-                        results_for_llm += r + "\n"
+                    results_for_llm += "Colonne: " + ", ".join(query_results['columns']) + "\n"
+                    for i, row in enumerate(query_results['rows']):
+                        results_for_llm += str(row) + "\n"
                     #if len(query_results['rows']) > 10: eliminato per superare le 15 righe
                     #    results_for_llm += f"... e altre {len(query_results['rows']) - 10} righe.\n"
-                    #print('-------> ',results_for_llm)
+                    print('-------> ',results_for_llm)
                     response_text = results_for_llm
                #     system_report_gen = "Your name is MariaCarla and you convert data from JSON to CSV."
                #     prompt_report_gen = f"""
@@ -222,6 +234,27 @@ def ask_assistant():
                #     logger.info("Invio a LLM per generazione report da SQL...")
                #     response_text = get_ollama_completion(prompt_report_gen, system_message=system_report_gen)
         
+        elif vector_store_docs:
+            logger.info("Tentativo RAG su documenti.")
+            embedding_function_docs = OllamaEmbeddings(model=OLLAMA_MODEL_NAME, base_url=OLLAMA_HOST)
+            query_embedding = embedding_function_docs.embed_query(user_question)
+            
+            retrieved_docs = vector_store_docs.similarity_search_by_vector(embedding=query_embedding, k=3)
+            if not retrieved_docs:
+                context = "Nessuna informazione pertinente trovata nei documenti."
+            else:
+                context = "\n\n---\n\n".join([doc.page_content for doc in retrieved_docs])
+                sources = list(set(doc.metadata.get('source', 'N/A') for doc in retrieved_docs))
+                logger.info(f"Fonti documenti: {sources}")
+
+            system_rag_docs = "Rispondi in italiano basandoti ESCLUSIVAMENTE sul contesto. Se l'info non c'è, dillo."
+            prompt_rag_docs = f"Contesto:\n{context}\n\nDomanda: {user_question}\n\nRisposta:"
+            logger.info("Invio a LLM per RAG su documenti...")
+            response_text = get_ollama_completion(prompt_rag_docs, system_message=system_rag_docs)
+        else:
+            logger.warning("Né intenzione DB chiara né vector store documenti disponibile.")
+            response_text = "Non so se la domanda sia per il DB o i documenti, e il sistema documenti non è pronto."
+
     except ValueError as ve:
         logger.error(f"Errore valore: {ve}")
         response_text = f"Problema dati AI: {ve}"
@@ -230,7 +263,7 @@ def ask_assistant():
         response_text = f"Errore interno: {e}"
     #if "<TABELLAHTML>" in response_text:
     #    return response_text
-    return jsonify({"risposta": response_text})
+    return jsonify({"risposta": response_text.split('</think>')[1]})#elimina think
 
 
 @app.route('/favicon.ico')

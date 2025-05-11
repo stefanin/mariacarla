@@ -27,4 +27,10 @@ https://python.langchain.com/docs/integrations/chat/ollama/
 #20250506 mariacarla con qwen3:0.6b
 ollama create mariacarla -f .\Mariacarla.txt
 ollama run mariacarla
-"from", "license", "template", "system", "adapter", "parameter", or "message"
+
+
+CREATE DATABASE `mariacarla` /*!40100 COLLATE 'utf16_unicode_ci' */;
+CREATE USER 'mariacarla'@'%' IDENTIFIED BY 'passwordMariaCarla';
+GRANT EXECUTE, PROCESS, SELECT, SHOW DATABASES, SHOW VIEW, ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TABLESPACE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, INDEX, INSERT, REFERENCES, TRIGGER, UPDATE, CREATE USER, FILE, LOCK TABLES, RELOAD, REPLICATION CLIENT, REPLICATION SLAVE, SHUTDOWN, SUPER  ON *.* TO 'mariacarla'@'%' WITH GRANT OPTION;
+FLUSH PRIVILEGES;
+SHOW GRANTS FOR 'mariacarla'@'%';
